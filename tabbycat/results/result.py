@@ -851,6 +851,7 @@ class DebateResultWithScoresMixin:
                 "speaker": self.get_speaker(side, pos),
                 "score": sheet.get_score(side, pos),
                 "rank": sheet.get_speaker_rank(side, pos),
+                "criteria": sheet.criteria_scores[side][pos],
             })
 
 
