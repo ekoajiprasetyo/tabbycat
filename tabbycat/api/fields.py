@@ -53,6 +53,41 @@ class TournamentHyperlinkedRelatedField(HyperlinkedRelatedField):
     def get_queryset(self):
         return super().get_queryset().filter(**self.lookup_kwargs()).select_related(self.tournament_field)
 
+    def to_internal_value(self, data):
+        """
+        Import-aware resolution: if context['import_mode'] is set, attempt to
+        resolve using an external-url -> instance mapping provided via
+        context['import_map'] before falling back to standard URL resolution.
+        """
+        # Fast-path: if not in import mode, behave normally
+        if not getattr(self, 'context', None) or not self.context.get('import_mode'):
+            return super().to_internal_value(data)
+
+        # Normalize to a relative path so keys are consistent
+        try:
+            http_prefix = data.startswith(('http:', 'https:'))
+        except AttributeError:
+            # Delegate to default handling for type errors
+            return super().to_internal_value(data)
+
+        if http_prefix:
+            parsed = parse.urlparse(data)
+            path = parsed.path
+            prefix = get_script_prefix()
+            if path.startswith(prefix):
+                path = '/' + path[len(prefix):]
+        else:
+            path = uri_to_iri(parse.unquote(data))
+
+        # Try mapping lookup first
+        import_map = self.context.get('import_map') or {}
+        mapped = import_map.get(path)
+        if mapped is not None:
+            return mapped
+
+        # Fallback to normal behavior (may still resolve locally)
+        return super().to_internal_value(data)
+
 
 class TournamentHyperlinkedIdentityField(TournamentHyperlinkedRelatedField, HyperlinkedIdentityField):
     pass
@@ -245,6 +280,26 @@ class BaseSourceField(TournamentHyperlinkedRelatedField):
         # Was the value already entered?
         if isinstance(data, tuple(model for model, field in self.models.values())):
             return data
+
+        # Import-aware shortcut: try import_map first
+        if getattr(self, 'context', None) and self.context.get('import_mode'):
+            try:
+                http_prefix = data.startswith(('http:', 'https:'))
+            except AttributeError:
+                self.fail('incorrect_type', data_type=type(data).__name__)
+
+            if http_prefix:
+                parsed = parse.urlparse(data)
+                path = parsed.path
+                prefix = get_script_prefix()
+                if path.startswith(prefix):
+                    path = '/' + path[len(prefix):]
+            else:
+                path = uri_to_iri(parse.unquote(data))
+
+            mapped = (self.context.get('import_map') or {}).get(path)
+            if mapped is not None:
+                return mapped
 
         try:
             http_prefix = data.startswith(('http:', 'https:'))

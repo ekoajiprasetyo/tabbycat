@@ -1425,3 +1425,9 @@ class FullTournamentViewSet(TournamentAPIMixin, ModelViewSet):
             'round_set__debate_set__debateteam_set__team__tournament',
             'round_set__debate_set__debateadjudicator_set__adjudicator__tournament',
         )
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        if self.request.method in ('POST', 'PUT', 'PATCH'):
+            ctx['import_mode'] = True
+        return ctx

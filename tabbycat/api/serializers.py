@@ -2,12 +2,15 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from datetime import date, datetime, time
 from functools import partial, partialmethod
+from urllib import parse
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.db.models import QuerySet
+from django.urls import get_script_prefix
 from django.utils import timezone
+from django.utils.encoding import uri_to_iri
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
@@ -1666,3 +1669,188 @@ class FullTournamentSerializer(TournamentSerializer):
     score_criteria = ScoreCriterionSerializer(many=True, source='scorecriterion_set')
     # institutions = InstitutionSerializer(many=True)
     # feedback_questions = FeedbackQuestionSerializer(many=True, source='question_set')
+
+    def _normalize_url_path(self, url):
+        try:
+            http_prefix = url.startswith(('http:', 'https:'))
+        except Exception:
+            return None
+        if http_prefix:
+            p = parse.urlparse(url)
+            path = p.path
+            prefix = get_script_prefix()
+            if path.startswith(prefix):
+                path = '/' + path[len(prefix):]
+            return path
+        return uri_to_iri(parse.unquote(url))
+
+    def _strip_ids_and_motion_urls(self, data):
+        """Deep-copy-like cleaner: remove generic 'id' fields and motion URLs for import leniency."""
+        if isinstance(data, dict):
+            data = {k: self._strip_ids_and_motion_urls(v) for k, v in data.items() if k != 'id'}
+            # For motion-in-round entries, drop 'url' key to allow creating from text/reference
+            # Round export structure: motions: [{ 'url': ..., 'text': ..., 'reference': ... }]
+            if 'motions' in data and isinstance(data['motions'], list):
+                cleaned = []
+                for m in data['motions']:
+                    if isinstance(m, dict):
+                        m = {k: self._strip_ids_and_motion_urls(v) for k, v in m.items() if k != 'url' and k != 'id'}
+                    cleaned.append(m)
+                data['motions'] = cleaned
+            return data
+        if isinstance(data, list):
+            return [self._strip_ids_and_motion_urls(v) for v in data]
+        return data
+
+    def to_internal_value(self, data):
+        if self.context.get('import_mode'):
+            # Stash nested sets to import later and validate only base Tournament fields now
+            self._raw_import = {
+                'speaker_categories': data.get('speaker_categories', []) or [],
+                'break_categories': data.get('break_categories', []) or [],
+                'venue_categories': data.get('venue_categories', []) or [],
+                'venues': data.get('venues', []) or [],
+                'score_criteria': data.get('score_criteria', []) or [],
+                'teams': data.get('teams', []) or [],
+                'adjudicators': data.get('adjudicators', []) or [],
+                'rounds': data.get('rounds', []) or [],
+            }
+            # Collect adjudicator feedback entries to import after rounds are created
+            self._raw_feedback = []
+            for adj in self._raw_import['adjudicators']:
+                if isinstance(adj, dict) and isinstance(adj.get('feedback'), list):
+                    for f in adj['feedback']:
+                        self._raw_feedback.append(f)
+
+            # Strip IDs and motion URLs to avoid cross-site URL validation issues
+            cleaned = {k: v for k, v in data.items() if k not in self._raw_import}
+            cleaned = self._strip_ids_and_motion_urls(cleaned)
+            return super().to_internal_value(cleaned)
+        return super().to_internal_value(data)
+
+    def _import_list(self, items, serializer_cls, save_kwargs=None, context=None):
+        """Create objects from raw items via serializer validation, update import_map by URL paths."""
+        if not items:
+            return []
+        created = []
+        ctx = self.context.copy()
+        if context:
+            ctx.update(context)
+        import_map = ctx.setdefault('import_map', {})
+        pending_adj_conflicts = []
+        for item in items:
+            # Preserve a copy for URL mapping before cleaning
+            raw_url = None
+            if isinstance(item, dict):
+                raw_url = item.get('url')
+                # Drop global institution links on import to avoid cross-site URL resolution
+                if serializer_cls in (TeamSerializer, AdjudicatorSerializer, FullAdjudicatorSerializer):
+                    item = {k: v for k, v in item.items() if k not in ('institution', 'institution_conflicts')}
+                # Stash adjudicator_conflicts for a second pass since they can be forward references
+                if serializer_cls in (AdjudicatorSerializer, FullAdjudicatorSerializer) and 'adjudicator_conflicts' in item:
+                    pending_adj_conflicts.append((raw_url, item.pop('adjudicator_conflicts')))
+            s = serializer_cls(data=item, context=ctx)
+            s.is_valid(raise_exception=True)
+            obj = s.save(**(save_kwargs or {}))
+            created.append(obj)
+            if raw_url:
+                path = self._normalize_url_path(raw_url)
+                if path:
+                    import_map[path] = obj
+        # Apply adjudicator conflicts now that all adjudicators exist and are mapped
+        if pending_adj_conflicts:
+            for owner_url, conflicts in pending_adj_conflicts:
+                owner = import_map.get(self._normalize_url_path(owner_url)) if owner_url else None
+                if owner is None:
+                    continue
+                targets = []
+                for c in conflicts or []:
+                    path = self._normalize_url_path(c)
+                    if path and path in import_map:
+                        targets.append(import_map[path])
+                if targets:
+                    try:
+                        owner.adjudicator_conflicts.set(targets)
+                    except Exception:
+                        pass
+        # Sync context back
+        self.context['import_map'] = import_map
+        return created
+
+    def _perform_full_import(self, instance):
+        ctx = self.context
+        ctx.setdefault('import_map', {})
+        ctx['tournament'] = instance
+
+        self._import_list(self._raw_import.get('speaker_categories'), SpeakerCategorySerializer, save_kwargs={'tournament': instance})
+        self._import_list(self._raw_import.get('break_categories'), BreakCategorySerializer, save_kwargs={'tournament': instance})
+        self._import_list(self._raw_import.get('venue_categories'), VenueCategorySerializer, save_kwargs={'tournament': instance})
+        self._import_list(self._raw_import.get('score_criteria'), ScoreCriterionSerializer, save_kwargs={'tournament': instance})
+        self._import_list(self._raw_import.get('venues'), VenueSerializer, save_kwargs={'tournament': instance})
+        self._import_list(self._raw_import.get('teams'), TeamSerializer, save_kwargs={'tournament': instance})
+        self._import_list(self._raw_import.get('adjudicators'), AdjudicatorSerializer, save_kwargs={'tournament': instance})
+
+        for r in self._raw_import.get('rounds') or []:
+            # Extract nested
+            raw_motion_urls = []
+            if isinstance(r, dict) and isinstance(r.get('motions'), list):
+                raw_motion_urls = [m.get('url') for m in r.get('motions', [])]
+            r = self._strip_ids_and_motion_urls(r)
+            pairings = r.pop('pairings', [])
+            preformed_panels = r.pop('preformed_panels', [])
+
+            # Create round (with motions)
+            rs = RoundSerializer(data=r, context=ctx)
+            rs.is_valid(raise_exception=True)
+            rnd = rs.save(tournament=instance)
+
+            # Map motions by sequence back to original URLs if present
+            if raw_motion_urls:
+                try:
+                    rms = list(RoundMotion.objects.filter(round=rnd).select_related('motion').order_by('seq'))
+                    for i, url in enumerate(raw_motion_urls):
+                        if not url:
+                            continue
+                        path = self._normalize_url_path(url)
+                        if not path:
+                            continue
+                        if i < len(rms):
+                            ctx['import_map'][path] = rms[i].motion
+                except Exception:
+                    pass
+
+            # Pairings (debates) with optional confirmed ballots
+            for p in pairings:
+                ps = FullRoundPairingSerializer(data=p, context={**ctx, 'round': rnd})
+                ps.is_valid(raise_exception=True)
+                debate = ps.save()
+                # Map pairing URL
+                if isinstance(p, dict) and p.get('url'):
+                    path = self._normalize_url_path(p['url'])
+                    if path:
+                        ctx['import_map'][path] = debate
+
+            # Preformed panels
+            for pp in preformed_panels:
+                pps = PreformedPanelSerializer(data=pp, context={**ctx, 'round': rnd})
+                pps.is_valid(raise_exception=True)
+                pps.save()
+
+        for f in getattr(self, '_raw_feedback', []) or []:
+            fs = FeedbackSerializer(data=self._strip_ids_and_motion_urls(f), context=ctx)
+            fs.is_valid(raise_exception=True)
+            fs.save()
+
+        return instance
+
+    def create(self, validated_data):
+        t = super().create(validated_data)
+        if self.context.get('import_mode'):
+            return self._perform_full_import(t)
+        return t
+
+    def update(self, instance, validated_data):
+        t = super().update(instance, validated_data)
+        if self.context.get('import_mode'):
+            return self._perform_full_import(t)
+        return t
