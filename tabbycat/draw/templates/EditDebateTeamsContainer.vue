@@ -4,7 +4,22 @@
                         :unallocatedComponent="unallocatedComponent"
                         :handle-unused-drop="moveTeam">
 
-    <drag-and-drop-actions slot="actions" :count="debatesOrPanelsCount"></drag-and-drop-actions>
+    <drag-and-drop-actions slot="actions" :count="debatesOrPanelsCount">
+      <template slot="default-highlights">
+        <button
+          class="btn conflictable conflicts-toolbar hover-histories-2-ago"
+          data-toggle="tooltip"
+          v-text="gettext('Seen')"
+          :title="'Has been in the same debate previously.'"
+        />
+        <button
+          class="btn conflictable conflicts-toolbar hover-institution"
+          data-toggle="tooltip"
+          v-text="gettext('Institution')"
+          :title="'Is from the same institution.'"
+        />
+      </template>
+    </drag-and-drop-actions>
 
    <template slot="extra-messages">
       <div id="alertdiv" class="alert alert-warning show">
