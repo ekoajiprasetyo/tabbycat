@@ -17,11 +17,11 @@
       </div>
 
       <div class="btn-group mb-md-0 mb-3" v-if="!isForVenues">
-        <button v-for="(optionState, optionKey) in this.filterByType"
-                :key="optionKey" type="button"
-                :class="['btn btn-outline-primary', optionState ? 'active' : '']"
-                @click="setListContext('filterByType', optionKey, !optionState)"
-                v-text="gettext(peopleFilterNames[optionKey])">
+        <button v-for="option in filterByTypeOptions"
+                :key="option.key" type="button"
+                :class="['btn btn-outline-primary', option.state ? 'active' : '']"
+                @click="setListContext('filterByType', option.key, !option.state)"
+                v-text="gettext(peopleFilterNames[option.key])">
         </button>
       </div>
 
@@ -158,6 +158,7 @@ export default {
     tournamentSlug: String,
     forAdmin: Boolean,
     teamSize: Number,
+    prelimsCompleted: Boolean,
   },
   computed: {
     statsAbsent: function () {
@@ -178,6 +179,16 @@ export default {
     },
     filterByType: function () {
       return this.isForVenues ? this.venuesFilterByType : this.peopleFilterByType
+    },
+    filterByTypeOptions: function () {
+      const options = []
+      _.forEach(this.filterByType, (state, key) => {
+        if (key === 'Breaking' && !this.prelimsCompleted) {
+          return
+        }
+        options.push({ key: key, state: state })
+      })
+      return options
     },
     sortByGroup: function () {
       return this.isForVenues ? this.venuesSortByGroup : this.peopleSortByGroup

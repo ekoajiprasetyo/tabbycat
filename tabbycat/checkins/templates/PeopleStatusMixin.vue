@@ -5,7 +5,7 @@ export default {
   data: function () {
     return {
       peopleFilterByType: {
-        All: true, Adjudicators: false, Debaters: false,
+        All: true, Adjudicators: false, Debaters: false, Breaking: false,
       },
       peopleSortByGroup: {
         Institution: !this.teamCodes, Name: this.teamCodes, Time: false,
@@ -17,6 +17,7 @@ export default {
         All: 'All',
         Adjudicators: 'Only Adjudicators',
         Debaters: 'Only Teams',
+        Breaking: 'Only Breaking',
       },
       speakerGroupingNames: {
         Speaker: 'By Person',
@@ -98,6 +99,7 @@ export default {
           speakersIn: teamSpeakers.length - _.filter(teamSpeakers, ['status', false]).length,
           institution: institution,
           identifier: _.flatten(_.map(teamSpeakers, 'identifier')),
+          breaking: _.some(teamSpeakers, speaker => speaker.breaking),
         }
         // Show as green if everyone in
         if (_.filter(team.speakers, ['status', false]).length > 0) {
@@ -128,15 +130,20 @@ export default {
     },
     peopleByType: function () {
       const entities = []
-      if (this.filterByType.All || this.filterByType.Adjudicators) {
+      const includeAdjudicators = this.filterByType.All || this.filterByType.Adjudicators || this.filterByType.Breaking
+      if (includeAdjudicators) {
         _.forEach(this.annotatedAdjudicators, (adjudicator) => {
           entities.push(adjudicator)
         })
       }
-      if (this.filterByType.All || this.filterByType.Debaters) {
+      const includeDebaters = this.filterByType.All || this.filterByType.Debaters || this.filterByType.Breaking
+      if (includeDebaters) {
         _.forEach(this.annotatedDebaters, (speakerOrTeam) => {
           entities.push(speakerOrTeam)
         })
+      }
+      if (this.filterByType.Breaking) {
+        return _.filter(entities, person => person.breaking)
       }
       return entities
     },
