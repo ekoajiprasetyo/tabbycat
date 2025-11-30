@@ -41,7 +41,7 @@
           <div>
             <strong>{% trans "Emoji:" %}</strong>
             {% if team.emoji %}
-              {{ team.emoji }}
+              <span class="emoji">{{ team.emoji }}</span>
             {% else %}
               <span class="text-muted">{% trans "No emoji assigned" %}</span>
             {% endif %}
