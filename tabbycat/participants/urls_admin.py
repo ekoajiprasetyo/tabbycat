@@ -12,6 +12,9 @@ urlpatterns = [
     path('code-names/',
         views.AdminCodeNamesListView.as_view(),
         name='participants-code-names-list'),
+    path('judgerule/',
+         views.InstituionAdjRuleView.as_view(),
+         name='judge-rule'),
 
     path('email/',
         views.EmailTeamRegistrationView.as_view(),

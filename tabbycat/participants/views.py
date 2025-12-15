@@ -8,15 +8,20 @@ from django.db.models import Count, Max, Prefetch, Q
 from django.db.models.functions import Coalesce
 from django.forms import HiddenInput
 from django.http import HttpResponseRedirect, JsonResponse
+from django.utils.html import format_html
 from django.utils.html import escape
 from django.utils.translation import gettext as _, gettext_lazy, ngettext
 from django.views.generic.base import View
 
+from itertools import groupby
+from operator import itemgetter
 from actionlog.mixins import LogActionMixin
 from actionlog.models import ActionLogEntry
 from adjfeedback.progress import FeedbackProgressForAdjudicator, FeedbackProgressForTeam
 from motions.models import RoundMotion
 from notifications.models import BulkNotification
+from draw.models import DebateTeam
+from adjallocation.models import DebateAdjudicator
 from notifications.views import TournamentTemplateEmailCreateView
 from options.utils import use_team_code_names
 from tournaments.mixins import (PublicTournamentPageMixin,
@@ -27,7 +32,6 @@ from utils.misc import redirect_tournament, reverse_tournament
 from utils.mixins import AdministratorMixin, AssistantMixin
 from utils.tables import TabbycatTableBuilder
 from utils.views import ModelFormSetView, VueTableTemplateView
-
 from .models import Adjudicator, Institution, Speaker, SpeakerCategory, Team
 from .serializers import SpeakerSerializer
 from .tables import AdjudicatorDebateTable, TeamDebateTable
@@ -452,3 +456,69 @@ class UpdateEligibilityEditView(LogActionMixin, AdministratorMixin, TournamentMi
             return JsonResponse({'status': 'false', 'message': message}, status=500)
 
         return JsonResponse(json.dumps(True), safe=False)
+
+
+class InstituionAdjRuleView(TournamentMixin, VueTableTemplateView):
+
+    page_title = gettext_lazy("Judge Rule")
+    page_emoji = '🔨'
+
+    url_name = 'judge-rule'
+
+    def get_table(self):
+
+        rounds = self.tournament.round_set.filter(stage = Round.Stage.PRELIMINARY)
+        institutions = Institution.objects.filter(
+            Q(adjudicator__tournament=self.tournament)|Q(team__tournament=self.tournament))
+        inst_teams = DebateTeam.objects.filter(
+            debate__round__stage=Round.Stage.PRELIMINARY,
+            team__tournament=self.tournament, team__institution_id__isnull=False
+        ).order_by('team__institution_id').values('debate__round_id', 'team__institution_id').annotate(Count('id'))
+        inst_adju = DebateAdjudicator.objects.filter(
+            debate__round__stage=Round.Stage.PRELIMINARY,
+            adjudicator__tournament=self.tournament, adjudicator__institution_id__isnull=False
+        ).order_by('adjudicator__institution_id').values('debate__round_id', 'adjudicator__institution_id').annotate(Count('id'))
+
+        for inst_id, group in groupby(inst_teams, key=itemgetter('team__institution_id')):
+            institution = next((i for i in institutions if i.id == inst_id), None)
+            for r in group:
+                setattr(institution, 'r_%d_teams' % r['debate__round_id'], r['id__count'])
+        for inst_id, group in groupby(inst_adju, key=itemgetter('adjudicator__institution_id')):
+            institution = next((i for i in institutions if i.id == inst_id), None)
+            for r in group:
+                setattr(institution, 'r_%d_adjudicators' % r['debate__round_id'], r['id__count'])
+        
+        for inst in institutions:
+            for round in rounds:
+                teams = getattr(inst, f"r_{round.id}_teams", 0)
+                adju = getattr(inst, f"r_{round.id}_adjudicators", 0)
+
+                text = f"{teams}/{adju}"
+
+                if adju < max(0, teams - 1):
+                    text = format_html('<span class="text-danger fw-bold">{}</span>', text)
+
+                setattr(inst, f"round_{round.id}", text)
+
+
+        table = TabbycatTableBuilder(
+            view=self,
+            data=institutions,
+            sort_key='code_name'
+        )
+
+        table.add_column(
+            {'key': 'code_name', 'title': _("Institution")},
+            [inst.code for inst in institutions]
+        )
+
+        for round in rounds:
+            table.add_column(
+                {
+                    'key': f'round_{round.id}',
+                    'title': round.name,
+                },
+                [getattr(inst, f"round_{round.id}") for inst in institutions]
+            )
+
+        return table
