@@ -1,5 +1,6 @@
 import json
 import logging
+from itertools import groupby
 
 from django.conf import settings
 from django.contrib import messages
@@ -28,7 +29,7 @@ from utils.mixins import AdministratorMixin, AssistantMixin
 from utils.tables import TabbycatTableBuilder
 from utils.views import ModelFormSetView, VueTableTemplateView
 
-from .models import Adjudicator, Institution, Speaker, SpeakerCategory, Team
+from .models import Adjudicator, Institution, Person, Speaker, SpeakerCategory, Team
 from .serializers import SpeakerSerializer
 from .tables import AdjudicatorDebateTable, TeamDebateTable
 
@@ -133,6 +134,56 @@ class PublicInstitutionsListView(PublicTournamentPageMixin, BaseInstitutionsList
     public_page_preference = 'public_institutions_list'
     admin = False
     cache_timeout = settings.PUBLIC_SLOW_CACHE_TIMEOUT
+
+
+class InstitutionGenderDiversityView(AdministratorMixin, TournamentMixin, VueTableTemplateView):
+    """View showing gender breakdown of speakers and adjudicators by institution."""
+
+    page_title = gettext_lazy("Institution Gender Diversity")
+    page_emoji = '📊'
+    template_name = 'participants_list.html'
+    view_permission = Permission.VIEW_PARTICIPANT_GENDER
+
+    def get_context_data(self, **kwargs):
+        kwargs['gender_diversity_nav'] = True
+        return super().get_context_data(**kwargs)
+
+    def get_table(self):
+        tournament = self.tournament
+        gender_choices = dict(Person.GENDER_CHOICES) | {'': _("N/A")}
+
+        # Get institutions with participants in this tournament
+        institutions = Institution.objects.filter(
+            Q(team__tournament=tournament) | Q(adjudicator__tournament=tournament, adjudicator__independent=False),
+        ).distinct().order_by('code')
+
+        speakers = {k: list(v) for k, v in groupby(Speaker.objects.filter(
+            team__tournament=tournament,
+        ).values('team__institution', 'gender').annotate(
+            count=Count('id'),
+        ).order_by('team__institution'), key=lambda x: x['team__institution'])}
+        adjudicators = {k: list(v) for k, v in groupby(Adjudicator.objects.filter(tournament=tournament, independent=False).values('institution', 'gender').annotate(
+            count=Count('id'),
+        ).order_by('institution'), key=lambda x: x['institution'])}
+
+        table = TabbycatTableBuilder(view=self, sort_key='institution')
+
+        table.add_column(
+            {'key': 'institution', 'title': _("Institution")},
+            [inst.name for inst in institutions],
+        )
+        for gender, label in gender_choices.items():
+            table.add_column(
+                {'key': f'speaker_{gender}', 'title': _("Speakers (%(gender)s)") % {'gender': label}},
+                [next((s['count'] for s in speakers.get(inst.id, []) if s['gender'] == gender), 0) for inst in institutions],
+            )
+        for gender, label in gender_choices.items():
+            table.add_column(
+                {'key': f'adjudicator_{gender}', 'title': _("Adjudicators (%(gender)s)") % {'gender': label}},
+                [next((s['count'] for s in adjudicators.get(inst.id, []) if s['gender'] == gender), 0) for inst in institutions],
+            )
+
+        return table
 
 
 class BaseCodeNamesListView(TournamentMixin, VueTableTemplateView):

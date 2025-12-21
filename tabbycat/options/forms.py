@@ -32,6 +32,9 @@ class TournamentPreferenceForm(PreferenceForm):
             if get_pref('draw_avoid_conflicts') != 'graph_one' and get_pref('draw_odd_bracket') in ['pullup_lowest_ds_rank', 'pullup_lowest_ds_rank_npulls']:
                 raise ValidationError({'draw_rules__draw_odd_bracket': _("Draw strength pullups require 'Minimum cost matching (including pullups)' as the conflict avoidance method")})
 
+            if get_pref('draw_avoid_conflicts') != 'one_up_one_down' and 'intermediate' in get_pref('draw_odd_bracket'):
+                raise ValidationError({'draw_rules__draw_odd_bracket': _("Intermediate-type pullups require 'One-up-one-down' as the conflict avoidance method")})
+
         elif section == 'debate_rules':
             if get_pref('teams_in_debate') == 4 and (get_pref('ballots_per_debate_prelim') == 'per-adj' or get_pref('ballots_per_debate_elim') == 'per-adj'):
                 raise ValidationError({'debate_rules__teams_in_debate': _("Four-team formats require consensus ballots")})

@@ -56,7 +56,7 @@ class BaseTableBuilder:
         self.subtitle = kwargs.get('subtitle', "")
         self.table_class = kwargs.get('table_class', "")
         self.sort_key = kwargs.get('sort_key', '')
-        self.sort_order = kwargs.get('sort_order', '')
+        self.sort_order = kwargs.get('sort_order', 'asc' if self.sort_key else '')
         self.empty_title = kwargs.get('empty_title', _("No Data Available"))
         self.highlight_column = None  # Column index to use for row highlighting (None = no highlighting)
 
