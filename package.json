@@ -29,11 +29,8 @@
     "@babel/core": "^7.16.0",
     "@babel/preset-env": "^7.16.4",
     "@popperjs/core": "^2.6.0",
-    "@sentry/browser": "^5.30.0",
-    "@sentry/integrations": "^5.30.0",
+    "@sentry/vue": "^10.32.1",
     "@vue/compiler-sfc": "^3.5.0",
-    "@vueuse/core": "^14.1.0",
-    "ajv": "7.0.0",
     "bootstrap": "^4.6.1",
     "browserify": "17.0.x",
     "browserslist": "^4.18.1",
@@ -52,7 +49,6 @@
     "popper.js": "^1.16.1",
     "quagga": "0.12.x",
     "sass": "^1.56.1",
-    "stats-percentile": "^3.3.0",
     "vue": "^3.5.0"
   },
   "browserslist": [

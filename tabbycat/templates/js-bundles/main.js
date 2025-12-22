@@ -1,8 +1,7 @@
 // The base template with universal or near-universal functionality (imported on all pages)
 import { createApp, defineAsyncComponent } from 'vue'
 import { createPinia } from 'pinia'
-import * as Sentry from '@sentry/browser'
-import * as Integrations from '@sentry/integrations'
+import * as Sentry from '@sentry/vue';
 import feather from 'feather-icons'
 import $ from 'jquery'
 import 'bootstrap' // Import bootstrap javascript plugins
@@ -32,14 +31,12 @@ if (window.buildData.sentry === true) {
   try {
     Sentry.init({
       dsn: 'https://88a028d7eb504d93a1e4c92e077d6ce5@o85113.ingest.sentry.io/185378',
-      integrations: [new Integrations.Vue({ attachProps: true })],
       release: window.buildData.version,
+      integrations: (integrations) =>
+        integrations.filter((integration) => integration.name !== "Vue"),
     })
   } catch (e) {
-    Sentry.init({
-      dsn: 'https://88a028d7eb504d93a1e4c92e077d6ce5@o85113.ingest.sentry.io/185378',
-      release: window.buildData.version,
-    })
+    console.error('Failed to initialize Sentry:', e)
   }
 }
 
@@ -261,6 +258,7 @@ if (typeof vueData !== 'undefined') {
       components: vueComponents,
       data: () => vueData,
     })
+    Sentry.addIntegration(Sentry.vueIntegration({ app }));
     app.use(pinia)
     useDragAndDropStore(pinia)
     app.mixin(vueTranslationMixin)
