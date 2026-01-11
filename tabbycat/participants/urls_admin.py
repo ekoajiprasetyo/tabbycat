@@ -15,6 +15,9 @@ urlpatterns = [
     path('code-names/',
         views.AdminCodeNamesListView.as_view(),
         name='participants-code-names-list'),
+    path('adj-requirement/',
+         views.InstitutionAdjRuleView.as_view(),
+         name='participants-adj-rule'),
 
     path('email/',
         views.EmailTeamRegistrationView.as_view(),

@@ -1,6 +1,7 @@
 import json
 import logging
 from itertools import groupby
+from operator import itemgetter
 
 from django.conf import settings
 from django.contrib import messages
@@ -15,7 +16,9 @@ from django.views.generic.base import View
 
 from actionlog.mixins import LogActionMixin
 from actionlog.models import ActionLogEntry
+from adjallocation.models import DebateAdjudicator
 from adjfeedback.progress import FeedbackProgressForAdjudicator, FeedbackProgressForTeam
+from draw.models import DebateTeam
 from motions.models import RoundMotion
 from notifications.models import BulkNotification
 from notifications.views import TournamentTemplateEmailCreateView
@@ -503,3 +506,90 @@ class UpdateEligibilityEditView(LogActionMixin, AdministratorMixin, TournamentMi
             return JsonResponse({'status': 'false', 'message': message}, status=500)
 
         return JsonResponse(json.dumps(True), safe=False)
+
+
+class InstitutionAdjRuleView(TournamentMixin, AdministratorMixin, VueTableTemplateView):
+
+    page_title = gettext_lazy("Adjudicator Requirement")
+    page_emoji = '🔨'
+    template_name = 'participants_list.html'
+    admin = True
+
+    RULES = {
+        'N-1': lambda a, t: a < t - 1,
+    }
+
+    def get_table(self):
+
+        rounds = self.tournament.round_set.filter(stage=Round.Stage.PRELIMINARY).exclude(draw_status=Round.Status.NONE)
+        institutions = Institution.objects.filter(
+            Q(adjudicator__tournament=self.tournament) | Q(team__tournament=self.tournament),
+        ).distinct()
+        inst_teams = DebateTeam.objects.filter(
+            debate__round__stage=Round.Stage.PRELIMINARY,
+            team__tournament=self.tournament, team__institution_id__isnull=False,
+        ).exclude(
+            debate__round__draw_status=Round.Status.NONE,
+        ).order_by('team__institution_id').values('debate__round_id', 'team__institution_id').annotate(Count('id'))
+        inst_adju = DebateAdjudicator.objects.filter(
+            debate__round__stage=Round.Stage.PRELIMINARY,
+            adjudicator__tournament=self.tournament, adjudicator__institution_id__isnull=False,
+        ).exclude(
+            debate__round__draw_status=Round.Status.NONE,
+        ).order_by('adjudicator__institution_id').values('debate__round_id', 'adjudicator__institution_id').annotate(Count('id'))
+
+        reg_teams = {r['institution_id']: r['id__count'] for r in Team.objects.values('institution_id').annotate(Count('id'))}
+        reg_adjs = {
+            r['institution_id']: r['id__count'] for r in Adjudicator.objects.filter(independent=False).values('institution_id').annotate(Count('id'))
+        }
+
+        for inst_id, group in groupby(inst_teams, key=itemgetter('team__institution_id')):
+            institution = next((i for i in institutions if i.id == inst_id), None)
+            for r in group:
+                setattr(institution, 'r_%d_teams' % r['debate__round_id'], r['id__count'])
+        for inst_id, group in groupby(inst_adju, key=itemgetter('adjudicator__institution_id')):
+            institution = next((i for i in institutions if i.id == inst_id), None)
+            for r in group:
+                setattr(institution, 'r_%d_adjudicators' % r['debate__round_id'], r['id__count'])
+
+        table = TabbycatTableBuilder(
+            view=self,
+            data=institutions,
+            sort_key='code_name',
+        )
+
+        table.add_column(
+            {'key': 'code_name', 'title': _("Institution")},
+            [inst.code for inst in institutions],
+        )
+
+        def create_inst_cell(round_id, inst, teams=0, adju=0):
+            teams = getattr(inst, f"r_{round_id}_teams", teams)
+            adju = getattr(inst, f"r_{round_id}_adjudicators", adju)
+
+            cell = {'text': f"{teams}/{adju}"}
+
+            if self.RULES['N-1'](adju, teams):
+                cell['class'] = 'text-danger'
+            return cell
+
+        table.add_column(
+            {'key': 'reg', 'title': _("Registered")},
+            [create_inst_cell(0, inst, reg_teams[inst.id], reg_adjs[inst.id]) for inst in institutions],
+        )
+
+        for round in rounds:
+            table.add_column(
+                {
+                    'key': f'round_{round.id}',
+                    'title': round.name,
+                },
+                [create_inst_cell(round.id, inst) for inst in institutions],
+            )
+
+        return table
+
+    def get_context_data(self, **kwargs):
+        # These are used to choose the nav display
+        kwargs['adj_req_nav'] = True
+        return super().get_context_data(**kwargs)
