@@ -7,5 +7,10 @@
   <a class="btn btn-outline-primary" href="{% tournamenturl 'reg-adjudicator-questions' %}">
     {% trans "Questions" %}
   </a>
+  {% if view.view_name == 'reg-independent-adj-list' %}
+    <a class="btn btn-outline-primary" href="{% tournamenturl 'reg-independent-adj-questions' %}">
+      {% trans "IA Questions" %}
+    </a>
+  {% endif %}
 </div>
 {% endblock %}

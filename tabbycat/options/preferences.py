@@ -1764,3 +1764,23 @@ class TeamRegisterMessage(LongStringPreference):
     default = ""
     widget = SummernoteWidget(attrs={'height': 150, 'class': 'form-summernote'})
     field_kwargs = {'required': False}
+
+
+@tournament_preferences_registry.register
+class EnableIndependentAdjudicatorRegistration(BooleanPreference):
+    help_text = _("Allow participants to apply to be independent adjudicators")
+    verbose_name = _("Enable independent adjudicator registration")
+    section = registration
+    name = 'open_independent_adj_registration'
+    default = False
+
+
+@tournament_preferences_registry.register
+class IndependentAdjudicatorRegistrationHeader(LongStringPreference):
+    help_text = _("Header message to be displayed on the independent adjudicator application form")
+    verbose_name = _("Independent adjudicator registration header")
+    section = registration
+    name = 'independent_adj_registration_header'
+    default = ""
+    widget = SummernoteWidget(attrs={'height': 150, 'class': 'form-summernote'})
+    field_kwargs = {'required': False}

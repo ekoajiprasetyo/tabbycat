@@ -23,8 +23,10 @@ from utils.mixins import AdministratorMixin
 from utils.tables import TabbycatTableBuilder
 from utils.views import ModelFormSetView, PostOnlyRedirectView, VueTableTemplateView
 
-from .forms import AdjudicatorForm, InstitutionCoachForm, ParticipantAllocationForm, SpeakerForm, TeamForm, TournamentInstitutionForm
-from .models import Invitation, Question
+from .forms import (AdjudicatorForm,
+    IndependentAdjudicatorForm, InstitutionCoachForm, ParticipantAllocationForm,
+    SpeakerForm, TeamForm, TournamentInstitutionForm)
+from .models import IndependentAdjudicatorApplication, Invitation, Question
 from .utils import add_confirm_button_column, populate_invitation_url_keys
 
 
@@ -339,6 +341,50 @@ class PublicCreateAdjudicatorFormView(BaseCreateAdjudicatorFormView):
         return kwargs
 
 
+class CreateIndependentAdjudicatorApplicationView(LogActionMixin, PublicTournamentPageMixin, CustomQuestionFormMixin, SessionWizardView):
+    form_list = [
+        ('questions', IndependentAdjudicatorForm),
+        ('adjudicator', AdjudicatorForm),
+    ]
+    template_name = 'wizard_registration_form.html'
+    page_emoji = '👂'
+    page_title = gettext_lazy("Apply as Independent Adjudicator")
+
+    public_page_preference = 'open_independent_adj_registration'
+    action_log_type = ActionLogEntry.ActionType.ADJUDICATOR_REGISTER
+
+    def get_form_list(self):
+        form_list = []
+        if self.tournament.question_set.filter(for_content_type=ContentType.objects.get_for_model(IndependentAdjudicatorApplication)).exists():
+            form_list.append(('questions', IndependentAdjudicatorForm))
+        form_list.append(('adjudicator', AdjudicatorForm))
+        return form_list
+
+    def get_form_kwargs(self, step=None):
+        kwargs = super().get_form_kwargs(step)
+        kwargs['tournament'] = self.tournament
+        return kwargs
+
+    def get_context_data(self, form, **kwargs):
+        context = super().get_context_data(form=form, **kwargs)
+        context['header_message'] = self.tournament.pref('independent_adj_registration_header')
+        return context
+
+    def get_success_url(self):
+        return reverse_tournament('privateurls-person-index', self.tournament, kwargs={'url_key': self.object.url_key})
+
+    def done(self, form_list, form_dict, **kwargs):
+        self.object = form_dict['adjudicator'].save()
+
+        questions_form = form_dict['questions']
+        questions_form.instance.adjudicator = self.object
+        questions_form.save()
+
+        messages.success(self.request, _("Your application as independent adjudicator has been submitted."))
+        self.log_action()
+        return HttpResponseRedirect(self.get_success_url())
+
+
 class CreateSpeakerFormView(LogActionMixin, PublicTournamentPageMixin, CustomQuestionFormMixin, FormView):
     form_class = SpeakerForm
     template_name = 'adjudicator_registration_form.html'
@@ -581,6 +627,29 @@ class AdjudicatorRegistrationTableView(TournamentMixin, AdministratorMixin, VueT
         add_confirm_button_column(table, adjudicators, 'reg-adjudicator-confirm', self.request)
 
         handle_question_columns(table, adjudicators)
+
+        return table
+
+
+class IndependentAdjudicatorApplicationTableView(TournamentMixin, AdministratorMixin, VueTableTemplateView):
+    page_emoji = '👂'
+    page_title = gettext_lazy("Independent Adjudicator Applications")
+    template_name = 'answer_tables/adjudicators.html'
+
+    view_permission = Permission.VIEW_REGISTRATION
+
+    def get_table(self):
+        adjudicators = IndependentAdjudicatorApplication.objects.filter(
+            adjudicator__tournament=self.tournament,
+        ).select_related('adjudicator__institution').prefetch_related('answers__question', 'adjudicator__answers__question')
+
+        table = TabbycatTableBuilder(view=self, title=_('Responses'), sort_key='name')
+        table.add_adjudicator_columns(adjudicators, show_metadata=False)
+        table.add_column({'key': 'email', 'title': _("Email")}, [adj.adjudicator.email for adj in adjudicators])
+        add_confirm_button_column(table, adjudicators, 'reg-adjudicator-confirm', self.request)
+
+        handle_question_columns(table, adjudicators)
+        handle_question_columns(table, [adj.adjudicator for adj in adjudicators], questions=self.tournament.question_set.filter(for_content_type=ContentType.objects.get_for_model(Adjudicator)))
 
         return table
 

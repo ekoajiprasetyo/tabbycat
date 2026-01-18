@@ -7,7 +7,14 @@
 
     <form class="col-lg-8 ml-lg-auto mr-md-auto d-flex flex-column gap-3" action="." method="POST">
 
-      {% block registration_header%}
+      {% block registration_header %}
+        {% if header_message %}
+          <div class="card">
+            <div class="card-body pb-0">
+              {{ header_message|safe }}
+            </div>
+          </div>
+        {% endif %}
       {% endblock %}
 
       {% csrf_token %}

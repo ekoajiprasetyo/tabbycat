@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from utils.admin import ModelAdmin
 
-from .models import Answer, Invitation, Question
+from .models import Answer, IndependentAdjudicatorApplication, Invitation, Question
 
 
 @admin.register(Answer)
@@ -20,3 +20,10 @@ class QuestionAdmin(ModelAdmin):
 @admin.register(Invitation)
 class InvitationAdmin(ModelAdmin):
     list_display = ('url_key', 'institution', 'team')
+
+
+@admin.register(IndependentAdjudicatorApplication)
+class IndependentAdjudicatorApplicationAdmin(ModelAdmin):
+    list_display = ('adjudicator', 'adjudicator__tournament')
+    list_filter = ('adjudicator__tournament',)
+    search_fields = ('adjudicator__name', 'adjudicator__email')

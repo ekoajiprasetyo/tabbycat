@@ -9,6 +9,7 @@ from participants.models import Adjudicator, Coach, Institution, RegistrationSta
 from privateurls.utils import populate_url_keys
 
 from .form_utils import CustomQuestionsFormMixin
+from .models import IndependentAdjudicatorApplication
 
 
 class TournamentInstitutionForm(CustomQuestionsFormMixin, forms.ModelForm):
@@ -269,3 +270,19 @@ class ParticipantAllocationForm(forms.Form):
             t_inst.teams_allocated = self.cleaned_data[self._fieldname_teams_allocated(institution)]
             t_inst.adjudicators_allocated = self.cleaned_data[self._fieldname_adjs_allocated(institution)]
         TournamentInstitution.objects.bulk_update(qs, ['teams_allocated', 'adjudicators_allocated'])
+
+
+class IndependentAdjudicatorForm(CustomQuestionsFormMixin, forms.ModelForm):
+    def __init__(self, tournament, *args, **kwargs):
+        self.tournament = tournament
+        super().__init__(*args, **kwargs)
+        self.add_question_fields()
+
+    class Meta:
+        model = IndependentAdjudicatorApplication
+        fields = []
+
+    def save(self):
+        obj = super().save()
+        self.save_answers(obj)
+        return obj

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -154,3 +154,17 @@ class Invitation(models.Model):
 
     def __str__(self):
         return '%s: %s invitation (%s)' % (self.tournament.name, self.for_content_type, self.team or self.institution)
+
+
+class IndependentAdjudicatorApplication(models.Model):
+    adjudicator = models.OneToOneField('participants.Adjudicator', models.CASCADE,
+        verbose_name=_("adjudicator"))
+
+    answers = GenericRelation(Answer)
+
+    class Meta:
+        verbose_name = _("independent adjudicator application")
+        verbose_name_plural = _("independent adjudicator applications")
+
+    def __str__(self):
+        return "IA application for %s" % self.adjudicator.name

@@ -30,4 +30,7 @@ urlpatterns = [
             views.CreateSpeakerFormView.as_view(),
             name='reg-create-speaker'),
     ])),
+    path('independent-adjudicator/',
+        views.CreateIndependentAdjudicatorApplicationView.as_view(),
+        name='reg-create-independent-adj'),
 ]

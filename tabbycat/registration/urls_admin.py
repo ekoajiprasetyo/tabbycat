@@ -3,6 +3,7 @@ from django.urls import include, path
 from participants.models import Adjudicator, Coach, Speaker, Team, TournamentInstitution
 
 from . import views
+from .models import IndependentAdjudicatorApplication
 
 
 urlpatterns = [
@@ -32,4 +33,13 @@ urlpatterns = [
     path('speakers/questions/',
         views.CustomQuestionFormsetView.as_view(question_model=Speaker, success_url='reg-team-list'),
         name='reg-speaker-questions'),
+    path('independent-adjudicators/', include([
+        path('', views.IndependentAdjudicatorApplicationTableView.as_view(), name='reg-independent-adj-list'),
+        path('questions/',
+            views.CustomQuestionFormsetView.as_view(
+                question_model=IndependentAdjudicatorApplication,
+                success_url='reg-independent-adj-list',
+            ),
+            name='reg-independent-adj-questions'),
+    ])),
 ]
