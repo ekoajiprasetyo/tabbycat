@@ -18,8 +18,6 @@
       <form action="." method="POST">
         {% csrf_token %}
 
-        {% trans "To finish creating your tournament select a basic configuration options. Note that these can always be changed later (and with more precise control) if needed." as text %}
-        {% include "components/form-title.html" %}
 
         {% include "components/form-main.html" %}
 
