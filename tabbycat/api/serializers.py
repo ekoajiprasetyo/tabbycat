@@ -35,7 +35,7 @@ from results.models import BallotSubmission, ScoreCriterion, SpeakerScore, Submi
 from results.result import DebateResult, ResultError
 from standings.speakers import SpeakerStandingsGenerator
 from standings.teams import TeamStandingsGenerator
-from tournaments.models import Round, Tournament
+from tournaments.models import Round, ScheduleEvent, Tournament
 from users.models import Group, Membership, UserPermission
 from users.permissions import has_permission, Permission
 from utils.misc import get_ip_address
@@ -212,6 +212,9 @@ class TournamentSerializer(serializers.ModelSerializer):
             lookup_field='slug', lookup_url_kwarg='tournament_slug')
         preferences = serializers.HyperlinkedIdentityField(
             view_name='tournamentpreferencemodel-list',
+            lookup_field='slug', lookup_url_kwarg='tournament_slug')
+        schedule_events = serializers.HyperlinkedIdentityField(
+            view_name='api-scheduleevent-list',
             lookup_field='slug', lookup_url_kwarg='tournament_slug')
 
     _links = TournamentLinksSerializer(source='*', read_only=True)
@@ -1060,6 +1063,22 @@ class VenueCategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = VenueCategory
+        exclude = ('tournament',)
+
+
+class ScheduleEventSerializer(serializers.ModelSerializer):
+    url = fields.TournamentHyperlinkedIdentityField(view_name='api-scheduleevent-detail')
+    round = fields.TournamentHyperlinkedRelatedField(
+        view_name='api-round-detail',
+        lookup_field='seq',
+        lookup_url_kwarg='round_seq',
+        queryset=Round.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+
+    class Meta:
+        model = ScheduleEvent
         exclude = ('tournament',)
 
 
