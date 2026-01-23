@@ -516,6 +516,9 @@ class InstitutionRegistrationTableView(TournamentMixin, AdministratorMixin, VueT
         if self.tournament.pref('institution_participant_registration'):
             table.add_column({'key': 'adjudicators_registered', 'title': _("Adjudicators Registered")}, [inst_adj_count[t_inst.id] for t_inst in t_institutions])
 
+        if 'region' in self.tournament.pref('reg_institution_fields'):
+            table.add_column({'key': 'region', 'title': _("Region")}, [getattr(t_inst.institution.region, 'name', '') for t_inst in t_institutions])
+
         handle_question_columns(table, t_institutions)
 
         return table

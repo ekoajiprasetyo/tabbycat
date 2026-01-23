@@ -4,7 +4,7 @@ from django import forms
 from django.utils.translation import gettext_lazy as _
 
 from participants.emoji import EMOJI_RANDOM_FIELD_CHOICES, pick_unused_emoji
-from participants.models import Adjudicator, Coach, Institution, RegistrationStatus, Speaker, Team, TournamentInstitution
+from participants.models import Adjudicator, Coach, Institution, Region, RegistrationStatus, Speaker, Team, TournamentInstitution
 from privateurls.utils import populate_url_keys
 
 from .form_utils import CustomQuestionsFormMixin
@@ -14,9 +14,15 @@ class TournamentInstitutionForm(CustomQuestionsFormMixin, forms.ModelForm):
 
     institution_name = Institution._meta.get_field('name')
     institution_code = Institution._meta.get_field('code')
+    institution_region = Institution._meta.get_field('region')
 
     name = forms.CharField(max_length=institution_name.max_length, label=_("Institution name"), help_text=institution_name.help_text)
     code = forms.CharField(max_length=institution_code.max_length, label=_("Institution abbreviation"), help_text=institution_code.help_text)
+    region = forms.ModelChoiceField(
+        queryset=Region.objects.all(),
+        label=institution_region.verbose_name,
+        help_text=institution_region.help_text,
+    )
 
     field_order = ('name', 'code', 'teams_requested', 'adjudicators_requested')
 
@@ -29,12 +35,19 @@ class TournamentInstitutionForm(CustomQuestionsFormMixin, forms.ModelForm):
             self.fields.pop('teams_requested')
             self.fields.pop('adjudicators_requested')
 
+        if 'region' not in self.tournament.pref('reg_institution_fields'):
+            self.fields.pop('region')
+
     class Meta:
         model = TournamentInstitution
         exclude = ('tournament', 'institution', 'teams_allocated', 'adjudicators_allocated')
 
     def save(self):
-        inst, created = Institution.objects.get_or_create(name=self.cleaned_data.pop('name'), code=self.cleaned_data.pop('code'))
+        inst, created = Institution.objects.get_or_create(
+            name=self.cleaned_data.pop('name'),
+            code=self.cleaned_data.pop('code'),
+            region=self.cleaned_data.pop('region', None),
+        )
 
         obj = super().save(commit=False)
         obj.institution = inst

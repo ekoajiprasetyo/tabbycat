@@ -1630,6 +1630,19 @@ class TeamRegistrationFields(MultipleChoicePreference):
 
 
 @tournament_preferences_registry.register
+class InstitutionRegistrationFields(MultipleChoicePreference):
+    help_text = _("Which fields should institutions be allowed to submit")
+    verbose_name = _("Customizable institution fields")
+    section = registration
+    name = 'reg_institution_fields'
+    default = ()
+    choices = (
+        ('region', _("Region")),
+    )
+    widget = SelectMultiple(attrs={'size': 5})
+
+
+@tournament_preferences_registry.register
 class SpeakerRegistrationFields(MultipleChoicePreference):
     help_text = _("Which fields should speakers submit, in addition to fields with handling through other settings.")
     verbose_name = _("Customizable speaker fields")
