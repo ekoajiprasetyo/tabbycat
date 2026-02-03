@@ -133,6 +133,7 @@ class Permission(TextChoices):
     VIEW_CHECKIN = 'view.checkin', _("view checkins")
     EDIT_PARTICIPANT_CHECKIN = 'edit.participantcheckin', _("edit participant check-in")
     EDIT_ROOM_CHECKIN = 'edit.roomcheckin', _("edit room check-in")
+    EDIT_DEBATE_CHECKIN = 'edit.debatecheckin', _("edit debate check-in")
 
     EDIT_ROUND = 'edit.round', _("edit round attributes")
     DELETE_ROUND = 'delete.round', _("delete rounds")
