@@ -263,19 +263,38 @@ class PublicCreateTeamFormView(BaseCreateTeamFormView):
     def key(self):
         return self.request.GET.get('key') or self.request.POST.get('team-key') or self.request.POST.get('speaker-0-key')
 
+    def _get_team_invitation(self):
+        if not getattr(self, '_team_invitation', None) and self.key:
+            self._team_invitation = Invitation.objects.select_related('institution').filter(
+                tournament=self.tournament, for_content_type=ContentType.objects.get_for_model(Team), url_key=self.key,
+            ).first()
+        return getattr(self, '_team_invitation', None)
+
     @property
     def institution(self):
-        invitation = Invitation.objects.select_related('institution').filter(
-            tournament=self.tournament, for_content_type=ContentType.objects.get_for_model(Team), url_key=self.key).first()
-        return getattr(invitation, 'institution', None)
+        invitation = self._get_team_invitation()
+        return getattr(invitation, 'institution', None) if invitation else None
 
     def is_page_enabled(self, tournament):
-        if self.key:
-            return (
-                tournament.pref('institution_participant_registration') and
-                Invitation.objects.filter(tournament=tournament, for_content_type=ContentType.objects.get_for_model(Team), url_key=self.key).count() == 1
-            )
-        return super().is_page_enabled(tournament)
+        if not self.key:
+            return super().is_page_enabled(tournament)
+        invitation = Invitation.objects.select_related('institution').filter(
+            tournament=tournament, for_content_type=ContentType.objects.get_for_model(Team), url_key=self.key,
+        ).first()
+        if not invitation or not tournament.pref('institution_participant_registration'):
+            return False
+        if invitation.institution_id is not None and tournament.pref('reg_institution_slots'):
+            t_inst = TournamentInstitution.objects.filter(
+                tournament=tournament, institution=invitation.institution,
+            ).first()
+            if not t_inst:
+                return False
+            team_count = Team.objects.all_with_unconfirmed.filter(
+                tournament=tournament, institution=invitation.institution,
+            ).count()
+            if team_count >= t_inst.teams_allocated:
+                return False
+        return True
 
     def get_form_kwargs(self, step=None):
         kwargs = super().get_form_kwargs(step)
@@ -286,6 +305,13 @@ class PublicCreateTeamFormView(BaseCreateTeamFormView):
         else:
             kwargs['institution'] = self.institution
         return kwargs
+
+    def done(self, form_list, form_dict, **kwargs):
+        response = super().done(form_list, form_dict, **kwargs)
+        invitation = self._get_team_invitation()
+        if invitation is not None and invitation.institution_id is None:
+            invitation.delete()
+        return response
 
 
 class BaseCreateAdjudicatorFormView(LogActionMixin, PublicTournamentPageMixin, CustomQuestionFormMixin, FormView):
@@ -318,28 +344,53 @@ class PublicCreateAdjudicatorFormView(BaseCreateAdjudicatorFormView):
     def key(self):
         return self.request.GET.get('key') or self.request.POST.get('key')
 
+    def _get_adj_invitation(self):
+        if not getattr(self, '_adj_invitation', None) and self.key:
+            self._adj_invitation = Invitation.objects.select_related('institution').filter(
+                tournament=self.tournament, for_content_type=ContentType.objects.get_for_model(Adjudicator), url_key=self.key,
+            ).first()
+        return getattr(self, '_adj_invitation', None)
+
     @property
     def institution(self):
-        invitation = Invitation.objects.select_related('institution').filter(
-            tournament=self.tournament, for_content_type=ContentType.objects.get_for_model(Adjudicator), url_key=self.key).first()
-        return getattr(invitation, 'institution', None)
+        invitation = self._get_adj_invitation()
+        return getattr(invitation, 'institution', None) if invitation else None
 
     def is_page_enabled(self, tournament):
-        if self.key:
-            return (
-                tournament.pref('institution_participant_registration') and
-                Invitation.objects.filter(tournament=tournament, for_content_type=ContentType.objects.get_for_model(Adjudicator), url_key=self.key).count() == 1
-            )
-        return super().is_page_enabled(tournament)
+        if not self.key:
+            return super().is_page_enabled(tournament)
+        invitation = Invitation.objects.select_related('institution').filter(
+            tournament=tournament, for_content_type=ContentType.objects.get_for_model(Adjudicator), url_key=self.key,
+        ).first()
+        if not invitation or not tournament.pref('institution_participant_registration'):
+            return False
+        if invitation.institution_id is not None and tournament.pref('reg_institution_slots'):
+            t_inst = TournamentInstitution.objects.filter(
+                tournament=tournament, institution=invitation.institution,
+            ).first()
+            if not t_inst:
+                return False
+            adj_count = Adjudicator.objects.all_with_unconfirmed.filter(
+                tournament=tournament, institution=invitation.institution,
+            ).count()
+            if adj_count >= t_inst.adjudicators_allocated:
+                return False
+        return True
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        invitation = Invitation.objects.select_related('institution').filter(
-            tournament=self.tournament, for_content_type=ContentType.objects.get_for_model(Adjudicator), url_key=self.key).first()
+        invitation = self._get_adj_invitation()
         if invitation:
             kwargs['institution'] = invitation.institution
             kwargs['key'] = self.key
         return kwargs
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        invitation = self._get_adj_invitation()
+        if invitation is not None and invitation.institution_id is None:
+            invitation.delete()
+        return response
 
 
 class CreateSpeakerFormView(LogActionMixin, PublicTournamentPageMixin, CustomQuestionFormMixin, FormView):
@@ -366,7 +417,7 @@ class CreateSpeakerFormView(LogActionMixin, PublicTournamentPageMixin, CustomQue
             team = Team.objects.all_with_unconfirmed.prefetch_related('speaker_set').filter(tournament=tournament, pk=self.kwargs['pk']).first()
             return (
                 tournament.pref('institution_participant_registration') and
-                Invitation.objects.filter(tournament=tournament, for_content_type=ContentType.objects.get_for_model(Speaker), team=team, url_key=self.key).count() == 1 and
+                Invitation.objects.filter(tournament=tournament, for_content_type=ContentType.objects.get_for_model(Speaker), team=team, url_key=self.key).exists() and
                 team.speaker_set.count() < tournament.pref('speakers_in_team')
             )
         return False
