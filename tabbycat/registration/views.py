@@ -2,7 +2,6 @@ from typing import Sequence
 
 from django.contrib import messages
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.postgres.forms import SimpleArrayField
 from django.db.models import Count, Max, Prefetch, Sum
 from django.db.models.functions import Coalesce
 from django.forms import HiddenInput, modelformset_factory
@@ -605,7 +604,6 @@ class CustomQuestionFormsetView(TournamentMixin, AdministratorMixin, ModelFormSe
     formset_model = Question
     formset_factory_kwargs = {
         'fields': ['tournament', 'for_content_type', 'name', 'text', 'help_text', 'answer_type', 'required', 'min_value', 'max_value', 'choices'],
-        'field_classes': {'choices': SimpleArrayField},
         'widgets': {
             'tournament': HiddenInput,
             'for_content_type': HiddenInput,
