@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // Highlights for Allocation Pages
 //------------------------------------------------------------------------------
-
+@use "sass:math";
 $break-cat-cycle: $break-cat-1, $break-cat-2, $break-cat-3, $break-cat-4, $break-cat-5, $break-cat-6, $break-cat-0;
 
 .conflicts-toolbar:hover {
@@ -10,7 +10,7 @@ $break-cat-cycle: $break-cat-1, $break-cat-2, $break-cat-3, $break-cat-4, $break
 @mixin break-category-rules($prefix) {
   // Each pass of 7 cycles through the same colors, lightened by 10% per pass
   @for $i from 0 through 27 {
-    $color: lighten(nth($break-cat-cycle, $i % 7 + 1), floor($i / 7) * 10%);
+    $color: lighten(nth($break-cat-cycle, $i % 7 + 1), floor(math.div($i, 7)) * 10%);
 
     &.#{$prefix}-#{$i} {
       @include hover-highlights($color);
